@@ -8,222 +8,264 @@ using Sirenix.OdinInspector;
 using Sirenix.Serialization;
 using UnityEngine;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace MovableObject.Staging
 {
-    [Serializable]
-    [InlineProperty]
-    [HideLabel]
-    [HideReferenceObjectPicker]
-    public class MovableStage : IMovableTween, IMovableStage
-    {
-        private const string StageGroup = "Stage";
+	[Serializable]
+	[InlineProperty]
+	[HideLabel]
+	[HideReferenceObjectPicker]
+	public class MovableStage : MovableSaveable, IMovableTween, IMovableStage, ICloneable
+	{
+		private const string StageGroup = "Stage";
 
-        public Tween CurrentTween { get; set; }
+		public Tween CurrentTween { get; set; }
 
-        [FoldoutGroup(StageGroup)]
-        [SerializeField]
-        private MovableDelay delay = new MovableDelay();
+		[FoldoutGroup(StageGroup)] [SerializeField]
+		private MovableDelay delay = new MovableDelay();
 
-        [FoldoutGroup(StageGroup)] [OnValueChanged("AddAction")] [SerializeField]
-        private MovableAction.ActionType addActionType;
+		[FoldoutGroup(StageGroup)] [OnValueChanged("AddAction")] [SerializeField]
+		private MovableAction.ActionType addActionType;
 
-        [FoldoutGroup(StageGroup)]
-        [ShowIf("ShowScriptableMovableActionSelection")]
-        [OnValueChanged("AddScriptableAction")]
-        [AssetSelector] 
-        [ShowInInspector]
-        private ScriptableMovableBase scriptableMovableAction;
+		[FoldoutGroup(StageGroup)]
+		[ShowIf("ShowScriptableMovableActionSelection")]
+		[OnValueChanged("AddScriptableAction")]
+		[AssetSelector]
+		[ShowInInspector]
+		private ScriptableMovableBase scriptableMovableAction;
 
-        [OdinSerialize]
-        [FoldoutGroup(StageGroup)]
-        [ListDrawerSettings(HideAddButton = true, NumberOfItemsPerPage = 1)]
-        private List<MovableAction> actions = new List<MovableAction>();
+		[OdinSerialize] [FoldoutGroup(StageGroup)] [ListDrawerSettings(HideAddButton = true, NumberOfItemsPerPage = 1)]
+		private List<MovableAction> actions = new List<MovableAction>();
 
-        [FoldoutGroup(StageGroup)] [SerializeField]
-        private MovableEventsHolder eventHolder = new MovableEventsHolder();
+		[FoldoutGroup(StageGroup)] [SerializeField]
+		private MovableEventsHolder eventHolder = new MovableEventsHolder();
 
-        [SerializeField] [HideInInspector] private MovableObjectBase _movableObject;
-        private MovableAction.ActionType _prevActionType;
+		[SerializeField] [HideInInspector] private MovableObjectBase _movableObject;
+		private MovableAction.ActionType _prevActionType;
 
-        private ScriptableMovableBase _prevAddedScriptableMovableAction;
+		private ScriptableMovableBase _prevAddedScriptableMovableAction;
 
-        public MovableStage(MovableObjectBase movableObject)
-        {
-            _movableObject = movableObject;
-        }
+		public MovableStage(MovableObjectBase movableObject)
+		{
+			_movableObject = movableObject;
+		}
 
-        /// <summary>
-        /// Returns stage's currently assigned actions.
-        /// </summary>
-        /// <returns></returns>
-        public MovableAction[] GetActions()
-        {
-            return actions.ToArray();
-        }
+		/// <summary>
+		/// Returns stage's currently assigned actions.
+		/// </summary>
+		/// <returns></returns>
+		public MovableAction[] GetActions()
+		{
+			return actions.ToArray();
+		}
 
-        /// <summary>
-        /// Returns whether to show scriptable movable action selection field in the editor.
-        /// </summary>
-        /// <returns></returns>
-        private bool ShowScriptableMovableActionSelection()
-        {
-            return addActionType == MovableAction.ActionType.ScriptableAction;
-        }
+		/// <summary>
+		/// Returns whether to show scriptable movable action selection field in the editor.
+		/// </summary>
+		/// <returns></returns>
+		private bool ShowScriptableMovableActionSelection()
+		{
+			return addActionType == MovableAction.ActionType.ScriptableAction;
+		}
 
-        /// <summary>
-        /// Returns the amount of time for all actions to be completed.
-        /// </summary>
-        /// <param name="movableObject"></param>
-        /// <returns></returns>
-        private float ActionTime(float actionTime)
-        {
-            var count = actions.Count;
-            var time = 0f;
+		/// <summary>
+		/// Returns the amount of time for all actions to be completed.
+		/// </summary>
+		/// <param name="movableObject"></param>
+		/// <returns></returns>
+		private float ActionTime(float actionTime)
+		{
+			var count = actions.Count;
+			var time = 0f;
 
-            for (var i = 0; i < count; i++)
-            {
-                var currentActionTime = actions[i].ActionTime(actionTime);
+			for (var i = 0; i < count; i++)
+			{
+				var currentActionTime = actions[i].ActionTime(actionTime);
 
-                if (currentActionTime > time)
-                    time = currentActionTime;
-            }
+				if (currentActionTime > time)
+					time = currentActionTime;
+			}
 
-            return time;
-        }
+			return time;
+		}
 
-        /// <summary>
-        /// Plays all stage action simultaneously.
-        /// </summary>
-        /// <returns></returns>
-        public Tween PlayAction(float actionTime)
-        {
-            eventHolder.StartEvent();
+		/// <summary>
+		/// Plays all stage action simultaneously.
+		/// </summary>
+		/// <returns></returns>
+		public Tween PlayAction(float actionTime)
+		{
+			eventHolder.StartEvent();
 
-            var count = actions.Count;
-            var mySequence = DOTween.Sequence();
+			var count = actions.Count;
+			var mySequence = DOTween.Sequence();
 
-            for (var i = 0; i < count; i++)
-                mySequence.Join(actions[i].PlayAction(ActionTime(actionTime)));
+			for (var i = 0; i < count; i++)
+				mySequence.Join(actions[i].PlayAction(ActionTime(actionTime)));
 
-            CurrentTween = delay.UseDelay
-                ? mySequence.OnComplete(eventHolder.StartEvent).SetDelay(delay.DelayTime)
-                : mySequence.OnComplete(eventHolder.StartEvent);
+			CurrentTween = delay.UseDelay
+				? mySequence.OnComplete(eventHolder.StartEvent).SetDelay(delay.DelayTime)
+				: mySequence.OnComplete(eventHolder.StartEvent);
 
-            return CurrentTween;
-        }
+			return CurrentTween;
+		}
 
-        /// <summary>
-        /// Adds a scriptable action to the end of list by creating a copy of the original action.
-        /// </summary>
-        private void AddScriptableAction()
-        {
-            if (_prevAddedScriptableMovableAction != null || scriptableMovableAction == null)
-            {
-                _prevAddedScriptableMovableAction = null;
-                scriptableMovableAction = null;
-                return;
-            }
+		/// <summary>
+		/// Adds a scriptable action to the end of list by creating a copy of the original action.
+		/// </summary>
+		private void AddScriptableAction()
+		{
+			if (_prevAddedScriptableMovableAction != null || scriptableMovableAction == null)
+			{
+				_prevAddedScriptableMovableAction = null;
+				scriptableMovableAction = null;
+				return;
+			}
 
-            var assignedScriptableAction = scriptableMovableAction;
-            scriptableMovableAction = null;
+			var assignedScriptableAction = scriptableMovableAction;
+			scriptableMovableAction = null;
 
-            var scriptableActions = assignedScriptableAction.GetActions();
+			var scriptableActions = assignedScriptableAction.GetActions();
 
-            if (scriptableActions == null)
-            {
-                Debug.LogError(
-                    "Scriptable action doesn't contain any actions. " +
-                    "Please check the scriptable action and make sure actions are assigned");
-                return;
-            }
+			if (scriptableActions == null)
+			{
+				Debug.LogError(
+					"Scriptable action doesn't contain any actions. " +
+					"Please check the scriptable action and make sure actions are assigned");
+				return;
+			}
 
-            var count = scriptableActions.Length;
+			var count = scriptableActions.Length;
 
-            for (var i = 0; i < count; i++)
-            {
-                var action = scriptableActions[i];
+			for (var i = 0; i < count; i++)
+			{
+				var action = scriptableActions[i];
 
-                if (action == null)
-                {
-                    Debug.LogError(
-                        "Scriptable action doesn't have any actions specified." +
-                        " Action is null. Assign an action and component types and try again.");
-                    return;
-                }
+				if (action == null)
+				{
+					Debug.LogError(
+						"Scriptable action doesn't have any actions specified." +
+						" Action is null. Assign an action and component types and try again.");
+					return;
+				}
 
-                if (!(action is IMovableComponent movableComponent))
-                {
-                    Debug.LogError("Something went wrong, maybe try again.");
-                    return;
-                }
+				if (!(action is IMovableComponent movableComponent))
+				{
+					Debug.LogError("Something went wrong, maybe try again.");
+					return;
+				}
 
-                if (!movableComponent.AssignComponents(
-                    MovableStageBase.GetActionComponents(_movableObject, action.GetComponentType())))
-                    return;
+				if (!movableComponent.AssignComponents(
+					MovableStageBase.GetActionComponents(_movableObject, action.GetComponentType())))
+					return;
 
-                action.ToggleSaveButtonVisibility(true);
-                MovableStageBase.AddAction(action, ref actions);
-            }
+				action.ToggleSaveButtonVisibility(true);
+				MovableStageBase.AddAction(action, ref actions);
+			}
 
-            addActionType = MovableAction.ActionType.None;
-            _prevActionType = MovableAction.ActionType.ScriptableAction;
+			addActionType = MovableAction.ActionType.None;
+			_prevActionType = MovableAction.ActionType.ScriptableAction;
 
-            _prevAddedScriptableMovableAction = assignedScriptableAction;
-        }
+			_prevAddedScriptableMovableAction = assignedScriptableAction;
+		}
 
-        public void AddAction()
-        {
-            //Prevent duplicates with a single add.
-            if (_prevActionType == addActionType)
-            {
-                addActionType = MovableAction.ActionType.None;
-                _prevActionType = MovableAction.ActionType.None;
-                return;
-            }
+		public void AddAction()
+		{
+			//Prevent duplicates with a single add.
+			if (_prevActionType == addActionType)
+			{
+				addActionType = MovableAction.ActionType.None;
+				_prevActionType = MovableAction.ActionType.None;
+				return;
+			}
 
-            switch (addActionType)
-            {
-                case MovableAction.ActionType.ScriptableAction:
-                    scriptableMovableAction = null;
-                    return;
-            }
+			switch (addActionType)
+			{
+				case MovableAction.ActionType.ScriptableAction:
+					scriptableMovableAction = null;
+					return;
+			}
 
-            var action = MovableStageBase.GetAction(_movableObject, addActionType);
-            action.ToggleSaveButtonVisibility(true);
+			var action = MovableStageBase.GetAction(_movableObject, addActionType);
+			action.ToggleSaveButtonVisibility(true);
 
-            MovableStageBase.AddAction(action, ref actions);
+			MovableStageBase.AddAction(action, ref actions);
 
-            _prevActionType = addActionType;
-            addActionType = MovableAction.ActionType.None;
-        }
+			_prevActionType = addActionType;
+			addActionType = MovableAction.ActionType.None;
+		}
 
-        public void Stop(bool complete = false)
-        {
-            CurrentTween?.Kill(complete);
-        }
+		public void Stop(bool complete = false)
+		{
+			CurrentTween?.Kill(complete);
+		}
 
-        public void SetInitialState()
-        {
-            var actionCount = actions.Count;
+		public void SetInitialState()
+		{
+			var actionCount = actions.Count;
 
-            for (var i = 0; i < actionCount; i++)
-                actions[i].SetInitialState();
-        }
+			for (var i = 0; i < actionCount; i++)
+				actions[i].SetInitialState();
+		}
 
-        public void ResetPreviousState()
-        {
-            var actionCount = actions.Count;
+		public void ResetPreviousState()
+		{
+			var actionCount = actions.Count;
 
-            for (var i = 0; i < actionCount; i++)
-                actions[i].ResetPreviousState();
-        }
+			for (var i = 0; i < actionCount; i++)
+				actions[i].ResetPreviousState();
+		}
 
-        public void SaveObjectValues()
-        {
-            var actionCount = actions.Count;
+		public void SaveObjectValues()
+		{
+			var actionCount = actions.Count;
 
-            for (var i = 0; i < actionCount; i++)
-                actions[i].SaveObjectValues();
-        }
-    }
+			for (var i = 0; i < actionCount; i++)
+				actions[i].SaveObjectValues();
+		}
+
+#if UNITY_EDITOR
+
+		protected override string SaveAsScriptableObject()
+		{
+			var relativePath = base.SaveAsScriptableObject();
+
+			if (string.IsNullOrEmpty(relativePath))
+				return null;
+
+			var asset = ScriptableObject.CreateInstance<ScriptableMovableActionGroup>();
+
+			var thisAction = (MovableStage) Clone();
+
+
+
+			AssetDatabase.CreateAsset(asset, System.IO.Path.Combine("Assets", relativePath));
+			AssetDatabase.SaveAssets();
+
+			Debug.Log(
+				$"Saved action as scriptable object in a specified path: {relativePath}");
+
+			return relativePath;
+		}
+
+#endif
+		public object Clone()
+		{
+			var clone = (MovableStage) MemberwiseClone();
+
+			clone.actions = new List<MovableAction>();
+
+			//Clone actions.
+			for (var i = 0; i < actions.Count; i++)
+				clone.actions.Add((MovableAction) actions[i].Clone());
+
+			clone.delay = (MovableDelay) clone.delay.Clone();
+			clone.eventHolder = (MovableEventsHolder) clone.eventHolder.Clone();
+
+			return clone;
+		}
+	}
 }

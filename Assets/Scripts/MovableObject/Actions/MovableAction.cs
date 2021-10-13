@@ -1,13 +1,14 @@
 using System;
-using System.IO;
 using DG.Tweening;
 using MovableObject.Extensions;
 using MovableObject.Misc;
 using MovableObject.Scriptable;
 using Sirenix.OdinInspector;
-using UnityEditor;
 using UnityEngine;
-using Path = System.IO.Path;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace MovableObject.Actions
 {
@@ -15,28 +16,13 @@ namespace MovableObject.Actions
     [InlineProperty]
     [HideReferenceObjectPicker]
     [HideLabel]
-    public abstract class MovableAction : IMovableTween, ICloneable, IMovableActionComponent
+    public abstract class MovableAction : MovableSaveable, IMovableTween, ICloneable, IMovableActionComponent
     {
         public Tween CurrentTween { get; set; }
         [Title("$Title")] [SerializeField] private MovableTime time;
         [SerializeField] private MovableDelay delay = new MovableDelay();
         [SerializeField] private MovableEase ease = new MovableEase();
         [SerializeField] [PropertyOrder(2)] private MovableEventsHolder eventHolder = new MovableEventsHolder();
-
-        [SerializeField]
-        [HideInInspector]
-        private bool _showSaveButton;
-
-        [ShowIf("_showSaveButton")]
-        [FoldoutGroup("HorizontalGroup/Save")]
-        [PropertyOrder(-1)]
-        [FolderPath(ParentFolder = "Assets/", RequireExistingPath = true)]
-        [SerializeField] private string path;
-
-        [ShowIf("_showSaveButton")]
-        [FoldoutGroup("HorizontalGroup/Save")]
-        [PropertyOrder(-1)]
-        [SerializeField] private string fileName;
 
         /// <summary>
         /// Returns the title of the action which is displayed in the editor.
@@ -49,31 +35,12 @@ namespace MovableObject.Actions
 
 #if UNITY_EDITOR
 
-        /// <summary>
-        /// Saves action as a scriptable object.
-        /// </summary>
-        [HorizontalGroup("HorizontalGroup", Width = 0.75f), GUIColor(.5f, 0.5f, 1f)]
-        [PropertyOrder(-1)]
-        [FoldoutGroup("HorizontalGroup/Save", Expanded = false)]
-        [Button("Save as Scriptable Object")]
-        [ShowIf("_showSaveButton")]
-        private void SaveAsScriptableObject()
+        protected override string SaveAsScriptableObject()
         {
-            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(fileName))
-            {
-                Debug.LogError("Path or File Name value is empty or wrong input was used, please check and try again.");
-                return;
-            }
+            var relativePath = base.SaveAsScriptableObject();
 
-            var relativePath = Path.Combine(path, fileName + ".asset");
-            var filePath = Path.Combine(Application.dataPath, relativePath);
-
-            if (File.Exists(filePath))
-            {
-                Debug.LogError(
-                    "File in a specified path and with a specified file name already exists, choose another name.");
-                return;
-            }
+            if (string.IsNullOrEmpty(relativePath))
+	            return null;
 
             var asset = ScriptableObject.CreateInstance<ScriptableMovableAction>();
 
@@ -85,11 +52,13 @@ namespace MovableObject.Actions
             asset.Action = thisAction;
             asset.Action.ToggleSaveButtonVisibility(false);
 
-            AssetDatabase.CreateAsset(asset, Path.Combine("Assets", relativePath));
+            AssetDatabase.CreateAsset(asset, System.IO.Path.Combine("Assets", relativePath));
             AssetDatabase.SaveAssets();
 
             Debug.Log(
                 $"Saved action as scriptable object in a specified path: {relativePath}");
+
+            return relativePath;
         }
 
         /// <summary>
@@ -203,15 +172,6 @@ namespace MovableObject.Actions
             eventHolder = actionToCopyFrom.eventHolder;
 
             return this;
-        }
-
-        /// <summary>
-        /// Toggles save as scriptable object button visibility.
-        /// </summary>
-        /// <param name="toggle"></param>
-        public void ToggleSaveButtonVisibility(bool toggle)
-        {
-            _showSaveButton = toggle;
         }
 
         /// <summary>
